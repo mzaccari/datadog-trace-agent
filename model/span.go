@@ -81,3 +81,13 @@ func (s *Span) Normalize() error {
 func RandomID() uint64 {
 	return uint64(rand.Int63())
 }
+
+const FlushMarkerType = "_FLUSH_MARKER"
+
+func (s *Span) IsFlushMarker() bool {
+	return s.Type == FlushMarkerType
+}
+
+func NewFlushMarker() Span {
+	return Span{Type: FlushMarkerType}
+}

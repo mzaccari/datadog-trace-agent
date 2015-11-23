@@ -91,7 +91,7 @@ func (w *Writer) Flush() {
 
 		// decide to not flush if no spans & no stats
 		if p.IsEmpty() {
-			log.Debugf("Bucket %d sampler & stats are empty", p.Stats.Start)
+			log.Debugf("Payload is empty")
 			flushed++
 			continue
 		}
@@ -167,7 +167,7 @@ func (a APIEndpoint) Write(payload model.AgentPayload) error {
 	defer resp.Body.Close()
 
 	flushTime := time.Since(startFlush)
-	log.Infof("Bucket %d, flushed to the API (time=%s, size=%d)", payload.Stats.Start, flushTime, len(jsonStr))
+	log.Infof("Payload flushed to the API (time=%s, size=%d)", flushTime, len(jsonStr))
 	Statsd.Gauge("trace_agent.writer.flush_duration", flushTime.Seconds(), nil, 1)
 	Statsd.Count("trace_agent.writer.payload_bytes", int64(len(jsonStr)), nil, 1)
 

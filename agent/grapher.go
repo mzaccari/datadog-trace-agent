@@ -13,8 +13,8 @@ import (
 // Grapher builds a graph of all the components
 type Grapher struct {
 	inSpans    chan model.Span
-	inPayloads chan model.AgentPayload // Trigger the flush of the grapher when stats + samples are received
-	out        chan model.AgentPayload // Output the stats + samples + graph
+	inPayload  chan model.AgentPayload // Trigger the flush of the grapher when stats + samples are received
+	outPayload chan model.AgentPayload // Output the stats + samples + graph
 
 	conf *config.AgentConfig
 
@@ -45,13 +45,13 @@ func (e *Edge) Key() string {
 
 // NewGrapher creates a new empty grapher
 func NewGrapher(
-	inSpans chan model.Span, inPayloads chan model.AgentPayload, conf *config.AgentConfig,
+	inSpans chan model.Span, inPayload chan model.AgentPayload, conf *config.AgentConfig,
 ) *Grapher {
 
 	g := &Grapher{
 		inSpans:    inSpans,
-		inPayloads: inPayloads,
-		out:        make(chan model.AgentPayload),
+		inPayload:  inPayload,
+		outPayload: make(chan model.AgentPayload),
 
 		conf: conf,
 
@@ -76,10 +76,12 @@ func (g *Grapher) run() {
 	for {
 		select {
 		case span := <-g.inSpans:
-			g.AddSpan(span)
-		case bucket := <-g.inPayloads:
-			log.Info("Received a payload, initiating a graphing + flush")
-			g.out <- g.FlushPayload(bucket)
+			if span.IsFlushMarker() {
+				log.Debug("Grapher starts a flush")
+				g.FlushOnChannel()
+			} else {
+				g.AddSpan(span)
+			}
 		case <-g.exit:
 			log.Info("Grapher exiting")
 			g.wg.Done()
@@ -111,12 +113,16 @@ func (g *Grapher) AddSpan(s model.Span) {
 }
 
 // FlushPayload adds the graph to the payload received
-func (g *Grapher) FlushPayload(ap model.AgentPayload) model.AgentPayload {
+func (g *Grapher) FlushOnChannel() {
 	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	ap.Graph = g.graph
+	graph := g.graph
 	g.graph = make(map[string][]uint64)
+	g.mu.Unlock()
 
-	return ap
+	go func() {
+		ap := <-g.inPayload
+		log.Debug("Got one Agent Payload")
+		ap.Graph = graph
+		g.outPayload <- ap
+	}()
 }

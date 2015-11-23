@@ -42,6 +42,24 @@ func (s *ResourceQuantileSampler) AddSpan(span model.Span) {
 	s.mu.Unlock()
 }
 
+func (s *ResourceQuantileSampler) FlushOnChannel(in, out chan model.AgentPayload) {
+	// Freeze sampler state
+	s.mu.Lock()
+	traceIDBySpanID := s.TraceIDBySpanID
+	spansByTraceID := s.SpansByTraceID
+	s.TraceIDBySpanID = map[uint64]uint64{}
+	s.SpansByTraceID = map[uint64][]model.Span{}
+	s.mu.Unlock()
+
+	// Wait for upstream payload before sampling
+	go func() {
+		ap := <-in
+		log.Debug("Got one Agent Payload")
+		ap.Spans = s.GetSamples(traceIDBySpanID, spansByTraceID, ap.Stats)
+		out <- ap
+	}()
+}
+
 func (s *ResourceQuantileSampler) FlushPayload(ap model.AgentPayload) model.AgentPayload {
 	// Freeze sampler state
 	s.mu.Lock()
@@ -56,8 +74,10 @@ func (s *ResourceQuantileSampler) FlushPayload(ap model.AgentPayload) model.Agen
 }
 
 func (s *ResourceQuantileSampler) GetSamples(
-	traceIDBySpanID map[uint64]uint64, spansByTraceID map[uint64][]model.Span, sb model.StatsBucket,
+	traceIDBySpanID map[uint64]uint64, spansByTraceID map[uint64][]model.Span, sbs []model.StatsBucket,
 ) []model.Span {
+	// We should merge them instead of picking a random one
+	sb := sbs[0]
 	startTime := time.Now()
 	spanIDs := make([]uint64, len(sb.Distributions)*len(s.conf.SamplerQuantiles))
 

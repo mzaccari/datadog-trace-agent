@@ -47,7 +47,7 @@ func TestWriterExitsGracefully(t *testing.T) {
 	}
 }
 
-func getTestStatsBucket() model.StatsBucket {
+func getTestStatsBuckets() []model.StatsBucket {
 	now := model.Now()
 	bucketSize := time.Duration(5 * time.Second).Nanoseconds()
 	sb := model.NewStatsBucket(now, bucketSize)
@@ -60,7 +60,7 @@ func getTestStatsBucket() model.StatsBucket {
 		sb.HandleSpan(s, DefaultAggregators)
 	}
 
-	return sb
+	return []model.StatsBucket{sb}
 }
 
 // Testing the real logic of the writer
@@ -81,7 +81,7 @@ func TestWriterBufferFlush(t *testing.T) {
 	w.Start()
 
 	// light the fire by sending a bucket
-	w.in <- model.AgentPayload{Stats: getTestStatsBucket()}
+	w.in <- model.AgentPayload{Stats: getTestStatsBuckets()}
 
 	// the bucket should be added to our queue pretty fast
 	// HTTP endpoint is down so the bucket should stay in the queue

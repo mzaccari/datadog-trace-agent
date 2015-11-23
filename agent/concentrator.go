@@ -3,8 +3,8 @@ package main
 import (
 	"errors"
 	"expvar"
+	"sort"
 	"sync"
-	"time"
 
 	log "github.com/cihub/seelog"
 
@@ -26,7 +26,7 @@ var DefaultAggregators = []string{"service", "resource"}
 // It also takes care of inserting the spans in a sampler.
 type Concentrator struct {
 	in          chan model.Span             // incoming spans to process
-	out         chan model.AgentPayload     // outgoing buckets
+	outPayload  chan model.AgentPayload     // outgoing buckets
 	buckets     map[int64]model.StatsBucket // buckets use to aggregate stats per timestamp
 	aggregators []string                    // we'll always aggregate (if possible) to this finest grain
 	lock        sync.Mutex                  // lock to read/write buckets
@@ -42,7 +42,7 @@ func NewConcentrator(
 ) *Concentrator {
 	c := &Concentrator{
 		in:          in,
-		out:         make(chan model.AgentPayload),
+		outPayload:  make(chan model.AgentPayload),
 		buckets:     make(map[int64]model.StatsBucket),
 		aggregators: append(DefaultAggregators, conf.ExtraAggregators...),
 		conf:        conf,
@@ -58,14 +58,25 @@ func (c *Concentrator) Start() {
 	go func() {
 		// should return when upstream span channel is closed
 		for s := range c.in {
-			err := c.HandleNewSpan(s)
-			if err != nil {
-				log.Debugf("Span rejected by concentrator. Reason: %v", err)
+			if s.IsFlushMarker() {
+				log.Debug("Concentrator starts a flush")
+				c.flush()
+			} else {
+				err := c.HandleNewSpan(s)
+				if err != nil {
+					log.Debugf("Span %v rejected by concentrator. Reason: %v", s.SpanID, err)
+				}
 			}
 		}
 	}()
 
-	go c.closeBuckets()
+	go func() {
+		<-c.exit
+		log.Info("Concentrator exiting")
+		close(c.in)
+		c.wg.Done()
+		return
+	}()
 
 	log.Info("Concentrator started")
 }
@@ -95,33 +106,35 @@ func (c *Concentrator) HandleNewSpan(s model.Span) error {
 
 func (c *Concentrator) flush() {
 	c.lock.Lock()
-	defer c.lock.Unlock()
+	buckets := c.buckets
+	c.buckets = make(map[int64]model.StatsBucket)
+	c.lock.Unlock()
 
-	now := model.Now()
-	lastBucketTs := now - now%c.conf.BucketInterval.Nanoseconds()
+	go func() {
+		now := model.Now()
+		lastBucketTs := now - now%c.conf.BucketInterval.Nanoseconds()
+		payload := model.AgentPayload{Stats: []model.StatsBucket{}}
 
-	for ts, bucket := range c.buckets {
-		// flush & expire old buckets that cannot be hit anymore
-		if ts < now-c.conf.OldestSpanCutoff && ts != lastBucketTs {
-			log.Infof("Concentrator flushed bucket %d", ts)
-			c.out <- model.AgentPayload{Stats: bucket}
-			delete(c.buckets, ts)
+		// Sort buckets so that the newest is last
+		// FIXME(Benjamin): only works well on 64bits since cast to int to use sort.Ints
+		keys := []int{}
+		for k := range buckets {
+			keys = append(keys, int(k))
 		}
-	}
-}
+		sort.Ints(keys)
 
-func (c *Concentrator) closeBuckets() {
-	// block on the closer, to flush cleanly last bucket
-	ticker := time.Tick(c.conf.BucketInterval)
-	for {
-		select {
-		case <-c.exit:
-			log.Info("Concentrator exiting")
-			c.flush()
-			c.wg.Done()
-			return
-		case <-ticker:
-			c.flush()
+		for i := range keys {
+			ts := int64(keys[i])
+			bucket := buckets[ts]
+			// flush & expire old buckets that cannot be hit anymore
+			if ts < now-c.conf.OldestSpanCutoff && ts != lastBucketTs {
+				log.Infof("Concentrator adds bucket to payload %d", ts)
+				payload.Stats = append(payload.Stats, bucket)
+				// c.outPayload <- model.AgentPayload{Stats: bucket}
+				delete(buckets, ts)
+			}
 		}
-	}
+		log.Infof("Concentrator flushs payload")
+		c.outPayload <- payload
+	}()
 }

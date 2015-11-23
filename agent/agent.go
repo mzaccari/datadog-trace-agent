@@ -14,6 +14,7 @@ type Agent struct {
 	Grapher      *Grapher
 	Sampler      *Sampler
 	Writer       *Writer
+	Flusher      *Flusher
 
 	// config
 	Config *config.AgentConfig
@@ -28,13 +29,14 @@ func NewAgent(conf *config.AgentConfig) *Agent {
 
 	r := NewHTTPReceiver()
 	q := NewQuantizer(r.out)
+	f := NewFlusher(q.out, conf)
 
 	spansToConcentrator, spansToGrapher, spansToSampler := spanDoubleTPipe(q.out)
 
 	c := NewConcentrator(spansToConcentrator, conf)
-	g := NewGrapher(spansToGrapher, c.out, conf)
-	s := NewSampler(spansToSampler, g.out, conf)
-	w := NewWriter(s.out, conf)
+	g := NewGrapher(spansToGrapher, c.outPayload, conf)
+	s := NewSampler(spansToSampler, g.outPayload, conf)
+	w := NewWriter(s.outPayload, conf)
 
 	return &Agent{
 		Config:       conf,
@@ -44,6 +46,7 @@ func NewAgent(conf *config.AgentConfig) *Agent {
 		Grapher:      g,
 		Sampler:      s,
 		Writer:       w,
+		Flusher:      f,
 		exit:         exit,
 	}
 }
@@ -69,6 +72,7 @@ func (a *Agent) Start() error {
 	a.Grapher.Start()
 	a.Quantizer.Start()
 	a.Receiver.Start()
+	a.Flusher.Start()
 
 	// FIXME: catch start errors
 	return nil
@@ -78,6 +82,7 @@ func (a *Agent) Start() error {
 func (a *Agent) Stop() error {
 	log.Info("Stopping agent")
 
+	a.Flusher.Stop()
 	a.Receiver.Stop()
 	a.Quantizer.Stop()
 	a.Concentrator.Stop()
