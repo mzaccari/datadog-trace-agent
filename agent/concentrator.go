@@ -26,7 +26,7 @@ var DefaultAggregators = []string{"service", "resource"}
 // It also takes care of inserting the spans in a sampler.
 type Concentrator struct {
 	in          chan model.Span             // incoming spans to process
-	outPayload  chan model.AgentPayload     // outgoing buckets
+	out         chan []model.StatsBucket    // outgoing payload
 	buckets     map[int64]model.StatsBucket // buckets use to aggregate stats per timestamp
 	aggregators []string                    // we'll always aggregate (if possible) to this finest grain
 	lock        sync.Mutex                  // lock to read/write buckets
@@ -42,7 +42,7 @@ func NewConcentrator(
 ) *Concentrator {
 	c := &Concentrator{
 		in:          in,
-		outPayload:  make(chan model.AgentPayload),
+		out:         make(chan []model.StatsBucket),
 		buckets:     make(map[int64]model.StatsBucket),
 		aggregators: append(DefaultAggregators, conf.ExtraAggregators...),
 		conf:        conf,
@@ -60,7 +60,7 @@ func (c *Concentrator) Start() {
 		for s := range c.in {
 			if s.IsFlushMarker() {
 				log.Debug("Concentrator starts a flush")
-				c.flush()
+				c.out <- c.Flush()
 			} else {
 				err := c.HandleNewSpan(s)
 				if err != nil {
@@ -73,7 +73,7 @@ func (c *Concentrator) Start() {
 	go func() {
 		<-c.exit
 		log.Info("Concentrator exiting")
-		close(c.in)
+		close(c.out)
 		c.wg.Done()
 		return
 	}()
@@ -104,37 +104,42 @@ func (c *Concentrator) HandleNewSpan(s model.Span) error {
 	return nil
 }
 
-func (c *Concentrator) flush() {
+// Int64Slice attaches the methods of sort.Interface to []int64.
+type Int64Slice []int64
+
+func (p Int64Slice) Len() int           { return len(p) }
+func (p Int64Slice) Less(i, j int) bool { return p[i] < p[j] }
+func (p Int64Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+
+func SortInts64(a []int64) {
+	sort.Sort(Int64Slice(a))
+}
+
+func (c *Concentrator) Flush() []model.StatsBucket {
+	now := model.Now()
+	lastBucketTs := now - now%c.conf.BucketInterval.Nanoseconds()
+	sb := []model.StatsBucket{}
+	keys := []int64{}
+
 	c.lock.Lock()
-	buckets := c.buckets
-	c.buckets = make(map[int64]model.StatsBucket)
-	c.lock.Unlock()
+	defer c.lock.Unlock()
 
-	go func() {
-		now := model.Now()
-		lastBucketTs := now - now%c.conf.BucketInterval.Nanoseconds()
-		payload := model.AgentPayload{Stats: []model.StatsBucket{}}
+	// Sort buckets by timestamp
+	for k := range c.buckets {
+		keys = append(keys, k)
+	}
+	SortInts64(keys)
 
-		// Sort buckets so that the newest is last
-		// FIXME(Benjamin): only works well on 64bits since cast to int to use sort.Ints
-		keys := []int{}
-		for k := range buckets {
-			keys = append(keys, int(k))
+	for i := range keys {
+		ts := keys[i]
+		bucket := c.buckets[ts]
+		// flush & expire old buckets that cannot be hit anymore
+		if ts < now-c.conf.OldestSpanCutoff && ts != lastBucketTs {
+			log.Infof("Concentrator adds bucket to payload %d", ts)
+			sb = append(sb, bucket)
+			delete(c.buckets, ts)
 		}
-		sort.Ints(keys)
-
-		for i := range keys {
-			ts := int64(keys[i])
-			bucket := buckets[ts]
-			// flush & expire old buckets that cannot be hit anymore
-			if ts < now-c.conf.OldestSpanCutoff && ts != lastBucketTs {
-				log.Infof("Concentrator adds bucket to payload %d", ts)
-				payload.Stats = append(payload.Stats, bucket)
-				// c.outPayload <- model.AgentPayload{Stats: bucket}
-				delete(buckets, ts)
-			}
-		}
-		log.Infof("Concentrator flushs payload")
-		c.outPayload <- payload
-	}()
+	}
+	log.Debugf("Concentrator flushes %d stats buckets", len(sb))
+	return sb
 }

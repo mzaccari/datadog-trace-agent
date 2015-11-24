@@ -26,7 +26,7 @@ type Writer struct {
 }
 
 // NewWriter returns a new Writer
-func NewWriter(in chan model.AgentPayload, conf *config.AgentConfig) *Writer {
+func NewWriter(conf *config.AgentConfig) *Writer {
 	var endpoint BucketEndpoint
 	if conf.APIEnabled {
 		endpoint = NewAPIEndpoint(conf.APIEndpoint, conf.APIKey)
@@ -37,7 +37,7 @@ func NewWriter(in chan model.AgentPayload, conf *config.AgentConfig) *Writer {
 
 	w := Writer{
 		endpoint: endpoint,
-		in:       in,
+		in:       make(chan model.AgentPayload),
 	}
 	w.Init()
 
@@ -58,10 +58,10 @@ func (w *Writer) Start() {
 func (w *Writer) run() {
 	for {
 		select {
-		case payload := <-w.in:
-			log.Info("Received a bucket from sampler, initiating a flush")
+		case p := <-w.in:
+			log.Info("Received a payload, initiating a flush")
 			w.mu.Lock()
-			w.payloadsToWrite = append(w.payloadsToWrite, payload)
+			w.payloadsToWrite = append(w.payloadsToWrite, p)
 			w.mu.Unlock()
 			w.Flush()
 		case <-w.exit:
@@ -88,13 +88,6 @@ func (w *Writer) Flush() {
 
 	// FIXME: this is not ideal we might want to batch this into a single http call
 	for _, p := range w.payloadsToWrite {
-
-		// decide to not flush if no spans & no stats
-		if p.IsEmpty() {
-			log.Debugf("Payload is empty")
-			flushed++
-			continue
-		}
 
 		err := w.endpoint.Write(p)
 		if err != nil {

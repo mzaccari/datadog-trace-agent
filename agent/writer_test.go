@@ -17,12 +17,8 @@ func NewTestWriter() *Writer {
 	conf := config.NewDefaultAgentConfig()
 	conf.APIKey = "9d6e1075bb75e28ea6e720a4561f6b6d"
 	conf.APIEndpoint = "http://localhost:8080"
-	in := make(chan model.AgentPayload)
 
-	return NewWriter(
-		in,
-		conf,
-	)
+	return NewWriter(conf)
 }
 
 func TestWriterExitsGracefully(t *testing.T) {

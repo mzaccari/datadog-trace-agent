@@ -82,12 +82,14 @@ func RandomID() uint64 {
 	return uint64(rand.Int63())
 }
 
-const FlushMarkerType = "_FLUSH_MARKER"
+const flushMarkerType = "_FLUSH_MARKER"
 
+// IsFlushMarker tells if this is a marker span, meaning that the system should flush
 func (s *Span) IsFlushMarker() bool {
-	return s.Type == FlushMarkerType
+	return s.Type == flushMarkerType
 }
 
+// NewFlushMarker returns a new flush marker
 func NewFlushMarker() Span {
-	return Span{Type: FlushMarkerType}
+	return Span{Type: flushMarkerType}
 }

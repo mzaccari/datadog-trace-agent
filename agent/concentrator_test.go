@@ -90,20 +90,15 @@ func TestConcentratorStatsCounts(t *testing.T) {
 
 	// Triggers the flush
 	c.in <- model.NewFlushMarker()
-	// c.flush()
 
 	// Get the payload
-	payload := <-c.outPayload
-	// <-waitingForPayload
+	stats := <-c.out
 
-	if !assert.True(&payload != nil, "The payload is empty") {
-		t.FailNow()
-	}
-	if !assert.Equal(len(payload.Stats), 2) {
+	if !assert.Equal(len(stats), 2) {
 		t.FailNow()
 	}
 
-	receivedBuckets := []model.StatsBucket{payload.Stats[0], payload.Stats[1]}
+	receivedBuckets := []model.StatsBucket{stats[0], stats[1]}
 
 	// inspect our 2 stats buckets
 	assert.Equal(alignedNow-2*bucketInterval.Nanoseconds(), receivedBuckets[0].Start)
