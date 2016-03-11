@@ -297,14 +297,17 @@ func NewSkiplist() *Skiplist {
 
 // Insert adds a new Entry to the Skiplist and yields a pointer to the node where the data was inserted
 func (s *Skiplist) Insert(e Entry) *SkiplistNode {
-	level := 0
 
+	// Choose a random level for the entry (by finding the first 0 bit in a random 32 bit
+	// int) ....
+	level := 0
 	n := rand.Int31()
 	for n&1 == 1 {
 		level++
 		n >>= 1
 	}
 
+	// ... or the next highest if it doesn't exist.
 	if level > s.height {
 		s.height++
 		level = s.height
