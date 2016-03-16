@@ -2,6 +2,7 @@
 from collections import namedtuple
 from itertools import tee, izip, chain, groupby
 import math
+import numpy as np
 
 
 class Entry(object):
@@ -66,7 +67,7 @@ class Summary(object):
 
             i = j - 1
 
-        print 'start:%s end:%s' % (start_length, len(self.entries))
+        # print 'start:%s end:%s' % (start_length, len(self.entries))
 
     def _capacity(self, i):
         e = self.entries[i]
@@ -112,6 +113,14 @@ class Summary(object):
 
         return self.entries[-1].v
 
+    @classmethod
+    def merge(cls, s1, s2):
+        s = cls()
+        s.entries = s1.entries + s2.entries
+        s.entries.sort(key=lambda e:e.v)
+        s.count = s1.count + s2.count
+        s._compress()
+        return s
 
     def _validate(self):
         total = 0
@@ -125,8 +134,6 @@ class Summary(object):
         assert total == self.count, "%s != %s" % (total, self.count)
 
 
-
-
 def pairwise(iterable):
     """ Return the elements of iterable in pairs.
         s -> (s0,s1), (s1,s2), (s2, s3), ...a
@@ -138,17 +145,28 @@ def pairwise(iterable):
 
 
 if __name__ == '__main__':
-    s = Summary()
-    for i in sorted(range(1000), reverse=True):
-        s.sample(i)
-    for i in sorted(range(1000), reverse=False):
-        s.sample(i)
-    for i in sorted(range(1000), reverse=True):
-        s.sample(i)
 
-    for i in range(11):
-        q = i/10.0
-        v = s.quant(q)
-        print '%s %s' % (q, v)
+    inputs = np.random.rand(2000)
+
+    # merged
+    s1 = Summary()
+    s2 = Summary()
+    for i in inputs:
+        s1.sample(i)
+        s2.sample(i)
+    s3 = Summary.merge(s1, s2)
+
+    # not merged
+    s4 = Summary()
+    for loops in range(2):
+        for i in inputs:
+            s4.sample(i)
+
+    for q in range(0, 110, 10):
+        exact = np.percentile(inputs, q)
+        m = s3.quant(q/100.0)
+        n = s4.quant(q/100.0)
+        print 'q:%2s exact:%.3f merged:%.3f not-merged:%.3f' % (q, exact, m, n)
+
 
 
