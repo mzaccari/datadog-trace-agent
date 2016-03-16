@@ -143,10 +143,7 @@ def pairwise(iterable):
     return izip(a, b)
 
 
-
-if __name__ == '__main__':
-
-    inputs = np.random.rand(2000)
+def test(name, inputs, quantiles):
 
     # merged
     s1 = Summary()
@@ -162,11 +159,24 @@ if __name__ == '__main__':
         for i in inputs:
             s4.sample(i)
 
-    for q in range(0, 110, 10):
+    print ''
+    print 'name: %s' % name
+    for q in quantiles:
         exact = np.percentile(inputs, q)
         m = s3.quant(q/100.0)
         n = s4.quant(q/100.0)
-        print 'q:%2s exact:%.3f merged:%.3f not-merged:%.3f' % (q, exact, m, n)
+        print 'q:%3s exact:%.3f merged:%.3f not-merged:%.3f' % (q, exact, m, n)
 
+
+
+
+
+if __name__ == '__main__':
+    quantiles = range(0, 101, 5)
+
+    test('linear', np.arange(1000), quantiles)
+    test('random', np.random.rand(2000), quantiles)
+    test('log', np.log(np.arange(1, 2000)), quantiles)
+    test('pow', np.power(np.arange(1, 2000), 2), quantiles)
 
 
