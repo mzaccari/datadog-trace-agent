@@ -1,5 +1,14 @@
 package quantile
 
+// An implementation of Greenwald/Khanna Quantiles[1], which computes
+// approximate percentiles from a stream of data. The implementation is
+// inspired by https://github.com/dgryski/go-gk, which uses a skiplist for
+// faster inseration. It uses a slightly alternate implemenation[2], which is
+// built for distributed sensors and merging.
+//
+// [1] http://infolab.stanford.edu/~datar/courses/cs361a/papers/quantiles.pdf
+// [2] http://arxiv.org/pdf/1508.05710.pdf
+
 import (
 	"bytes"
 	"encoding/gob"
@@ -8,38 +17,26 @@ import (
 	"math/rand"
 )
 
-/*
-FIXME: shamelessly copied from dgryski/go-gk, not verified, not really tested
-Should reimplement everything from scratch from the paper
+// epsilon is the precision of the rank returned by our quantile queries
+// FIXME[matt] make epsilon a param, so that we can test space/accuracy trade-offs.
+const epsilon float64 = 0.01
 
-"Space-Efficient Online Computation of Quantile Summaries" (Greenwald, Khanna 2001)
-
-http://infolab.stanford.edu/~datar/courses/cs361a/papers/quantiles.pdf
-
-This implementation is backed by a skiplist to make inserting elements into the
-summary faster.  Querying is still O(n).
-
-*/
-
-// EPSILON is the precision of the rank returned by our quantile queries
-const EPSILON float64 = 0.01
-
-// Summary is a way to represent an approximation of the distribution of values
+// Summary stores and computes approximate quantiles.
 type Summary struct {
-	data        *Skiplist // where the real data is stored
-	EncodedData []Entry   `json:"data"` // flattened data user for ser/deser purposes
+	data        *Skiplist // a sorted skiplist of our quantile entries.
+	EncodedData []Entry   `json:"data"` // flattened data user for ser/deser purposes FIXME[matt] why??
 	N           int       `json:"n"`    // number of unique points that have been added to this summary
 }
 
-// Entry is an element of the skiplist, see GK paper for description
+// Entry is an element of the skiplist.
 type Entry struct {
-	V       int64    `json:"v"`
-	G       int      `json:"g"`
-	Delta   int      `json:"delta"`
+	V       int64    `json:"v"`       // The value that was sampled.
+	G       int      `json:"g"`       // The lower bound of the sample's rank
+	Delta   int      `json:"delta"`   // The delta bweteen the upper and lower rank of v
 	Samples []uint64 `json:"samples"` // Span IDs of traces representing this part of the spectrum
 }
 
-// NewSummary returns a new approx-summary with accuracy EPSILON
+// NewSummary returns a new approx-summary with accuracy epsilon
 func NewSummary() *Summary {
 	return &Summary{
 		data: NewSkiplist(),
@@ -52,7 +49,7 @@ func (s Summary) MarshalJSON() ([]byte, error) {
 		panic(errors.New("Cannot marshal non-initialized Summary"))
 	}
 
-	// TODO[leo] preallocate, not sure: 1/ 2*EPSILON?
+	// TODO[leo] preallocate, not sure: 1/ 2*epsilon?
 	s.EncodedData = make([]Entry, 0)
 	curr := s.data.head
 	for curr != nil {
@@ -91,7 +88,7 @@ func (s *Summary) UnmarshalJSON(b []byte) error {
 
 // GobEncode is used by the Kafka payload now, it flattens our skiplist
 func (s *Summary) GobEncode() ([]byte, error) {
-	// TODO[leo] preallocate, not sure: 1/ 2*EPSILON?
+	// TODO[leo] preallocate, not sure: 1/ 2*epsilon?
 	s.EncodedData = make([]Entry, 0)
 	curr := s.data.head
 	for curr != nil {
@@ -138,10 +135,10 @@ func (s *Summary) Insert(v int64, t uint64) {
 	s.N++
 
 	if eptr.prev[0] != s.data.head && eptr.next[0] != nil {
-		eptr.value.Delta = int(2 * EPSILON * float64(s.N))
+		eptr.value.Delta = int(2 * epsilon * float64(s.N))
 	}
 
-	if s.N%int(1.0/float64(2.0*EPSILON)) == 0 {
+	if s.N%int(1.0/float64(2.0*epsilon)) == 0 {
 		s.compress()
 	}
 }
@@ -149,7 +146,7 @@ func (s *Summary) Insert(v int64, t uint64) {
 func (s *Summary) compress() {
 	var missing int
 
-	epsN := int(2 * EPSILON * float64(s.N))
+	epsN := int(2 * epsilon * float64(s.N))
 
 	for elt := s.data.head.next[0]; elt != nil && elt.next[0] != nil; {
 		next := elt.next[0]
@@ -183,14 +180,14 @@ func (s *Summary) compress() {
 	}
 }
 
-// Quantile returns an EPSILON estimate of the element at quantile 'q' (0 <= q <= 1)
+// Quantile returns an epsilon estimate of the element at quantile 'q' (0 <= q <= 1)
 func (s *Summary) Quantile(q float64) (int64, []uint64) {
 
 	// convert quantile to rank
 	r := int(q*float64(s.N) + 0.5)
 
 	var rmin int
-	epsN := int(EPSILON * float64(s.N))
+	epsN := int(epsilon * float64(s.N))
 
 	for elt := s.data.head.next[0]; elt != nil; elt = elt.next[0] {
 		t := elt.value

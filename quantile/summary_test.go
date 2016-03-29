@@ -171,3 +171,7 @@ func TestSummaryBySlices(t *testing.T) {
 	fmt.Println(string(b))
 	// FIXME: assert the data, it's not a test!
 }
+
+func TestQuantilesMerging(t *testing.T) {
+
+}
