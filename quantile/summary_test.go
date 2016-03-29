@@ -156,7 +156,6 @@ func TestSummaryGob(t *testing.T) {
 	ss.GobDecode(bytes)
 
 	assert.Equal(s.N, ss.N)
-	fmt.Printf("%v\n%v\n", s.EncodedData, ss.EncodedData)
 }
 
 func TestSummaryBySlices(t *testing.T) {
@@ -167,11 +166,65 @@ func TestSummaryBySlices(t *testing.T) {
 	}
 
 	slices := s.BySlices(10)
-	b, _ := json.Marshal(slices)
-	fmt.Println(string(b))
+	json.Marshal(slices)
 	// FIXME: assert the data, it's not a test!
 }
 
 func TestQuantilesMerging(t *testing.T) {
+	assert := assert.New(t)
+
+	// summaries to merge
+	m1 := NewSummary()
+	m2 := NewSummary()
+
+	// an original summary
+	o := NewSummary()
+	o2 := NewSummary()
+
+	count := 10000
+	samples := make([]int64, count)
+	for i := 0; i < count; i++ {
+		//samples[i] = rand.Int63()
+		samples[i] = int64(i)
+	}
+
+	// sample a bunch of values
+	for _, s := range samples {
+		// sample twice into the "original" summary
+		o.Insert(s, uint64(s))
+		o.Insert(s, uint64(s))
+		// sample once into the summaries we'll merge
+		m1.Insert(s, uint64(s))
+		m2.Insert(s, uint64(s))
+	}
+
+	for i := 0; i < 2; i++ {
+		for _, s := range samples {
+			o2.Insert(s, uint64(s))
+		}
+	}
+
+	// merge them, make sure we're close.
+	m1.Merge(m2)
+
+	for i := 0; i < 11; i++ {
+		fmt.Println()
+
+		q := float64(i) / 10.0
+		var v int64
+		v, _ = o.Quantile(q)
+		fmt.Printf("o1 q:%.3f v:%d d:%d\n", q, v, int64(q*10000))
+
+		v, _ = m1.Quantile(q)
+		fmt.Printf("m1 q:%.3f v:%d d:%d\n", q, v)
+
+		v, _ = m2.Quantile(q)
+		fmt.Printf("m2 q:%.3f v:%d d:%s\n", q, v)
+
+		v, _ = o2.Quantile(q)
+		fmt.Printf("o2 q:%.3f v:%d d:%s\n", q, v)
+	}
+
+	assert.True(false)
 
 }

@@ -123,6 +123,10 @@ func (s *Summary) GobDecode(data []byte) error {
 
 // Insert inserts a new value v in the summary paired with t (the ID of the span it was reported from)
 func (s *Summary) Insert(v int64, t uint64) {
+	if s.N%int(1.0/float64(2.0*epsilon)) == 0 {
+		s.compress()
+	}
+
 	e := Entry{
 		V:       v,
 		G:       1,
@@ -135,12 +139,10 @@ func (s *Summary) Insert(v int64, t uint64) {
 	s.N++
 
 	if eptr.prev[0] != s.data.head && eptr.next[0] != nil {
-		eptr.value.Delta = int(2 * epsilon * float64(s.N))
+		p := eptr.prev[0].value
+		eptr.value.Delta = int(p.G + p.Delta - 1)
 	}
 
-	if s.N%int(1.0/float64(2.0*epsilon)) == 0 {
-		s.compress()
-	}
 }
 
 func (s *Summary) compress() {
@@ -315,6 +317,7 @@ func (s *Skiplist) Insert(e Entry) *SkiplistNode {
 		next:  make([]*SkiplistNode, level+1),
 		prev:  make([]*SkiplistNode, level+1),
 	}
+
 	curr := s.head
 	for i := s.height; i >= 0; i-- {
 
