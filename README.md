@@ -26,17 +26,17 @@
   $ cqlsh -f ./etc/dbs/trace.cql
   ```
 
-Ensure latest trace apps are installed: the webapp speaks to smelter and Elasticsearch directly for the Trace UI,
+5. Ensure latest trace apps are installed: the webapp speaks to smelter and Elasticsearch directly for the Trace UI,
 and submits it's own traces via the trace-agent receiver (by default listening on localhost:7777 in your VM)
-```
-$ goforit
-$ rake trace:install
-```
+  ```
+  $ goforit
+  $ rake trace:install
+  ```
 
-5. Run It
-```
-$ supe start trace:
-```
+6. Run It
+  ```
+  $ supe start trace:
+  ```
 
 
 #### Checking it works
@@ -113,39 +113,39 @@ If this is happening you will see a bunch of lines like this in `/var/log/dd-go/
 ```
 
 0. Check that a host exists in PG whose name matches the value of the `hostname` syscall (raclette gets this via `os.Hostname()` in go)
-```
-$ cd ~/workspace/dogweb
-$ rake cli:psql
-dogdata=# select * from host;
-```
+  ```
+  $ cd ~/workspace/dogweb
+  $ rake cli:psql
+  dogdata=# select * from host;
+  ```
 
-If such a host doesn't exist, it's probably because dd-agent is submitting a hostname that doesn't match
-the one raclette submits. To resolve:
+  If such a host doesn't exist, it's probably because dd-agent is submitting a hostname that doesn't match
+  the one raclette submits. To resolve:
 
 1. Ensure core services are running
-```
-$ supe status core:
-(If needed) $ supe start core:
-```
+  ```
+  $ supe status core:
+  (If needed) $ supe start core:
+  ```
 
 2.Restore dd-agent to submitting the default hostname
-```
-$ sudo sed -i.bak '/hostname/d' /etc/dd-agent/datadog.conf && sudo /etc/init.d/datadog-agent restart
-```
+  ```
+  $ sudo sed -i.bak '/hostname/d' /etc/dd-agent/datadog.conf && sudo /etc/init.d/datadog-agent restart
+  ```
 
 3. Ensure the right host has made it to PG (Repeat Step 0 above)
 
 4. Clear the Trace API's cache
   a. Check where trace api's redis instance lives
-```
-$ goforit
-$ cat trace/apps/trace-api/etc/api.ini | grep cache_url
-cache_url = redis://localhost:6380/1
-```
+    ```
+    $ goforit
+    $ cat trace/apps/trace-api/etc/api.ini | grep cache_url
+    cache_url = redis://localhost:6380/1
+    ```
   b. Flush the above redis instance
-```
-$ redis-cli -p 6380 -n 1 flushdb
-```
+    ```
+    $ redis-cli -p 6380 -n 1 flushdb
+    ```
 
 You should now see spans coming in at `localhost:8090/trace/search`. If you don't, ping us in #raclette
 
