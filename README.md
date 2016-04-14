@@ -4,32 +4,27 @@
 
 1. Enable your personal-chef [godev environment](https://github.com/DataDog/devops/wiki/Development-Environment#select-your-environment)
 
-2. Download [ES 2.0+](https://www.elastic.co/downloads/elasticsearch), extract, and run:
-
-```
-wget https://download.elastic.co/elasticsearch/release/org/elasticsearch/distribution/tar/elasticsearch/2.3.1/elasticsearch-2.3.1.tar.gz
-tar xvfz elasticsearch-2.3.1.tar.gz
-./elasticsearch-2.3.1/bin/elasticsearch
-```
-
-If there is a JVM conflict, and Elasticsearch refuses to start, run the suggested workaround
-```
-$ JAVA_OPTS='-XX:-UseSuperWord' ./elasticsearch-2.3.1/bin/elasticsearch -d
-```
-
+2. Download [ES 2.0+](https://www.elastic.co/downloads/elasticsearch), extract, and run: 
+  ```
+  $ wget https://download.elastic.co/elasticsearch/release/org/elasticsearch/distribution/tar/elasticsearch/2.3.1/elasticsearch-2.3.1.tar.gz
+  $ tar xvfz elasticsearch-2.3.1.tar.gz
+  $ ./elasticsearch-2.3.1/bin/elasticsearch
+  # If there is a JVM conflict, and Elasticsearch refuses to start, run the below workaround
+  $ JAVA_OPTS='-XX:-UseSuperWord' ./elasticsearch-2.3.1/bin/elasticsearch -d
+  ```
 3. Setup ES schema
-```
-rake trace:reset_es
-```
 
+  ```
+  rake trace:reset_es
+  ```
 4. Setup Cassandra chema
 
-```
-$ goforit
-$ rake db:cass_rebuild
-(If the above errors, probably a cqlsh issue, just use the defaults)
-$ cqlsh -f ./etc/dbs/trace.cql
-```
+  ```
+  $ goforit
+  $ rake db:cass_rebuild
+  (If the above errors, probably a cqlsh issue, just use the defaults)
+  $ cqlsh -f ./etc/dbs/trace.cql
+  ```
 
 Ensure latest trace apps are installed: the webapp speaks to smelter and Elasticsearch directly for the Trace UI,
 and submits it's own traces via the trace-agent receiver (by default listening on localhost:7777 in your VM)
