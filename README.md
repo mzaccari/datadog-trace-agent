@@ -112,7 +112,7 @@ If this is happening you will see a bunch of lines like this in `/var/log/dd-go/
 2016-04-14 10:56:01 ERROR (resolver.go:64) - Dropping span Span[tid:8914676175975151832,sid:208494955,app:dogweb,ser:pylons,nam:pylons.middleware.routes,res:__call__], reason: ResolvedSpan.Normalize: host ID must be set in span
 ```
 
-0. Check that a host exists in PG whose name matches the value of the `hostname` syscall (raclette gets this via `os.Hostname()` in go)
+1. Check that a host exists in PG whose name matches the value of the `hostname` syscall (raclette gets this via `os.Hostname()` in go)
   ```
   $ cd ~/workspace/dogweb
   $ rake cli:psql
@@ -122,36 +122,36 @@ If this is happening you will see a bunch of lines like this in `/var/log/dd-go/
   If such a host doesn't exist, it's probably because dd-agent is submitting a hostname that doesn't match
   the one raclette submits. To resolve:
 
-1. Ensure core services are running
+2. Ensure core services are running
   ```
   $ supe status core:
   (If needed) $ supe start core:
   ```
 
-2.Restore dd-agent to submitting the default hostname
+3. Restore dd-agent to submitting the default hostname
   ```
   $ sudo sed -i.bak '/hostname/d' /etc/dd-agent/datadog.conf && sudo /etc/init.d/datadog-agent restart
   ```
 
-3. Ensure the right host has made it to PG (Repeat Step 0 above)
+4. Ensure the right host has made it to PG (Repeat Step 1 above)
 
-4. Clear the Trace API's cache
-  a. Check where trace api's redis instance lives
-    ```
-    $ goforit
-    $ cat trace/apps/trace-api/etc/api.ini | grep cache_url
-    cache_url = redis://localhost:6380/1
-    ```
-  b. Flush the above redis instance
-    ```
-    $ redis-cli -p 6380 -n 1 flushdb
-    ```
+5. Clear the Trace API's cache
+  Check where trace api's redis instance lives
+  ```
+  $ goforit
+  $ cat trace/apps/trace-api/etc/api.ini | grep cache_url
+  cache_url = redis://localhost:6380/1
+  ```
+  Flush the above redis instance
+  ```
+  $ redis-cli -p 6380 -n 1 flushdb
+  ```
 
 You should now see spans coming in at `localhost:8090/trace/search`. If you don't, ping us in #raclette
 
 ##### Index Page showing blank
 Index page relies on smelter statistics and smelter relies on the postgres table `smelter_aggregate` to know how to create aggregate stats.
-If you see an empty trace index page, chances are the `smelter_aggregate` table in PG is empty. You can fix this with
+If you see an empty trace index page, chances are the `smelter_aggregate` table in PG is empty. You can fix this with:
 
 ```
 $ cd ~/workspace/dogweb
