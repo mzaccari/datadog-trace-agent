@@ -19,6 +19,7 @@ PACKAGES = %w(
   ./quantizer
   ./sampler
   ./statsd
+  ./watchdog
 )
 
 EXCLUDE_LINT = [
