@@ -52,6 +52,9 @@ type AgentConfig struct {
 	// logging
 	LogLevel    string
 	LogFilePath string
+
+	// watchdog
+	MaxMemory float64
 }
 
 // mergeEnv applies overrides from environment variables to the trace agent configuration
@@ -133,6 +136,8 @@ func NewDefaultAgentConfig() *AgentConfig {
 
 		LogLevel:    "INFO",
 		LogFilePath: "/var/log/datadog/trace-agent.log",
+
+		MaxMemory: 1e9,
 	}
 
 	return ac
@@ -258,6 +263,10 @@ APM_CONF:
 
 	if v, e := conf.GetInt("trace.receiver", "timeout"); e == nil {
 		c.ReceiverTimeout = v
+	}
+
+	if v, e := conf.GetFloat("trace.watchdog", "max_memory"); e == nil {
+		c.MaxMemory = v
 	}
 
 ENV_CONF:
