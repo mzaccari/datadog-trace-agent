@@ -54,7 +54,8 @@ type AgentConfig struct {
 	LogFilePath string
 
 	// watchdog
-	MaxMemory        float64       // MaxMemory is the threshold above which program panics and exits, to be restarted
+	MaxMemory        float64       // MaxMemory is the threshold (bytes allocated) above which program panics and exits, to be restarted
+	MaxConnections   int           // MaxConnections is the threshold (opened TCP connections) above which program panics and exits, to be restarted
 	WatchdogInterval time.Duration // WatchdogInterval is the delay between 2 watchdog checks
 }
 
@@ -139,6 +140,7 @@ func NewDefaultAgentConfig() *AgentConfig {
 		LogFilePath: "/var/log/datadog/trace-agent.log",
 
 		MaxMemory:        1e9,
+		MaxConnections:   5000,
 		WatchdogInterval: time.Duration(1) * time.Minute,
 	}
 
@@ -269,6 +271,10 @@ APM_CONF:
 
 	if v, e := conf.GetFloat("trace.watchdog", "max_memory"); e == nil {
 		c.MaxMemory = v
+	}
+
+	if v, e := conf.GetInt("trace.watchdog", "max_connections"); e == nil {
+		c.MaxConnections = v
 	}
 
 	if v, e := conf.GetInt("trace.watchdog", "check_delay_seconds"); e == nil {
