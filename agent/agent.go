@@ -172,5 +172,7 @@ func (a *Agent) watchdog() {
 		a.die("exceeded max connections (current=%d, max=%d)", wi.Net.Connections, a.conf.MaxConnections)
 	}
 
+	log.Infof("CPU.UserAVG=%f, Mem.AllocPerSec=%f", wi.CPU.UserAvg, wi.Mem.AllocPerSec)
+
 	updateWatchdogInfo(wi)
 }
